@@ -1,5 +1,5 @@
 from typing import List, Tuple
-import RPi.GPIO as gpio
+#import RPi.GPIO as gpio
 
 class motor:
 
@@ -22,7 +22,7 @@ class motor:
 
         gpio.setmode(gpio.BCM)
 
-        self.pinout = pinout
+        self.pinout = pinout # (13, 19, 26)
 
         for pin in  pinout:
             gpio.setup(pin, gpio.OUT)
@@ -46,21 +46,19 @@ class motor:
             print('Tipo de ativação invalida')
             return
         
-        config_tam = len(configs) -1
-        
         activation = configs[self.step_index]
         print(self.step_index, activation , configs)
 
-        if self.step_index >= config_tam:
+        if self.step_index >= len(configs) - 1:
             self.step_index = 0
             
         else:
             self.step_index += 1
 
-        for pin_index, pin in enumerate(self.pinout):
-            gpio.output(pin, activation[pin_index])
+        for pin, state in zip(self.pinout, activation):
+            gpio.output(pin, state)
 
-    def clean():
+    def clean(self):
         gpio.cleanup()
             
 
