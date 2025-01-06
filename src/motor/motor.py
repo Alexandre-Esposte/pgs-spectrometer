@@ -34,7 +34,7 @@ class motor:
 
 
     
-    def step(self, type: str) -> None:
+    def step(self) -> None:
         
         if self.type == 'single':
             configs = self._SINGLE_PHASE_EXCITATION
@@ -46,9 +46,10 @@ class motor:
             print('Tipo de ativação invalida')
             return
         
-        config_tam = len(configs)
+        config_tam = len(configs) -1
         
         activation = configs[self.step_index]
+        print(self.step_index, activation , configs)
 
         if self.step_index >= config_tam:
             self.step_index = 0
