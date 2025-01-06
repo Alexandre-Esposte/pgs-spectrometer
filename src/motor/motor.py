@@ -59,6 +59,9 @@ class motor:
 
         for pin_index, pin in enumerate(self.pinout):
             gpio.output(pin, activation[pin_index])
+
+    def clean():
+        gpio.cleanup()
             
 
         
