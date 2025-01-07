@@ -1,9 +1,10 @@
-from typing import List, Tuple
-#import RPi.GPIO as gpio
+from typing import List, Tuple, Union
+import RPi.GPIO as gpio
+import time
 
-class motor:
+class Motor:
 
-    def __init__(self, type: str, pinout: Tuple[float, float, float]):
+    def __init__(self, type: str = 'single', pinout: Tuple[int, int, int] = (10, 9, 11) ):
 
         self._SINGLE_PHASE_EXCITATION = [
             [1, 0, 0],  # Ativa apenas a primeira bobina
@@ -33,9 +34,13 @@ class motor:
         self.step_index = 0
 
 
-    
-    def step(self) -> None:
+    def deactivate(self):
+        for pin in self.pinout:
+            gpio.output(pin,gpio.LOW)
+
+    def step(self, direction: Union['ascendente', 'descendente']) -> None:
         
+        # Estabelecendo a estrategia de acionamento de bobinas
         if self.type == 'single':
             configs = self._SINGLE_PHASE_EXCITATION
 
@@ -46,8 +51,17 @@ class motor:
             print('Tipo de ativação invalida')
             return
         
+        # Estabelecendo direção
+        if direction == 'ascendente':
+            pinout = self.pinout[::-1]
+
+        elif direction == 'descendente':
+            pinout = self.pinout
+            
         activation = configs[self.step_index]
-        print(self.step_index, activation , configs)
+
+       # Executando a organização do indice de ativações
+        #print(self.step_index, activation, self.pinout, pinout)
 
         if self.step_index >= len(configs) - 1:
             self.step_index = 0
@@ -55,11 +69,29 @@ class motor:
         else:
             self.step_index += 1
 
-        for pin, state in zip(self.pinout, activation):
+        # Executando o passo
+        for pin, state in zip(pinout, activation):
             gpio.output(pin, state)
 
+    
+    def steps(self, steps: int, time_delay: float, direction: Union['ascendente', 'descendente'] = 'ascendente') -> None:
+
+        if self.type == 'double':
+            print('double')
+            steps *= 2
+
+            
+
+        for _ in range(steps):
+            self.step(direction)
+            time.sleep(time_delay)
+
+        time.sleep(0.1)
+        self.deactivate()
+
+    
     def clean(self):
         gpio.cleanup()
             
 
-        
+    
