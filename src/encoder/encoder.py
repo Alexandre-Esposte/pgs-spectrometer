@@ -3,7 +3,7 @@ import time
 import threading
 
 class Encoder:
-    def __init__(self, pin: int = 27):
+    def __init__(self, pin: int = 4):
 
         self.pin = pin
 
@@ -33,16 +33,41 @@ class Encoder:
                     self.on_hole = False
 
                 #print(f'Pino {self.pin} está no estado -> {gpio.input(self.pin)}')
-                time.sleep(1)
+                time.sleep(0.5)
 
             except KeyboardInterrupt:
                 print("Finalizando monitoramento do encoder")
     
+
+    def verificarFuro(self):
+        estado = gpio.input(self.pin)
+                
+        if estado == 0 and self.on_hole == False:
+            # futo detectado
+            self.on_hole = True
+            self.state_changes += 1
+            return 1
+
+        elif estado == 1 and self.on_hole == True:
+            # fora do furo
+            self.on_hole = False
+            return 0
+            
+        else:
+            return 0
+
     def start_monitoring(self):
         # Inicia o monitoramento em uma thread separada
         threading.Thread(target=self.encoderMedir, daemon=True).start()
         
 
+if __name__ == "__main__":
+    encoder = Encoder(pin = 4)
 
-    def clean(self):
-        gpio.cleanup()
+    while(True):
+        try:
+            print(encoder.state_changes, encoder.on_hole)
+            encoder.verificarFuro()
+        except KeyboardInterrupt:
+            gpio.cleanup()
+            print('Finalizando encoder')

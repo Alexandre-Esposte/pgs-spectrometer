@@ -81,7 +81,6 @@ class Motor:
             steps *= 2
 
             
-
         for _ in range(steps):
             self.step(direction)
             time.sleep(time_delay)
@@ -89,9 +88,6 @@ class Motor:
         time.sleep(0.1)
         self.deactivate()
 
-    
-    def clean(self):
-        gpio.cleanup()
             
 
     
