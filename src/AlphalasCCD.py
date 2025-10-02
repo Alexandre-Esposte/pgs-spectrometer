@@ -266,18 +266,9 @@ class AlphalasCCD():
 if __name__ == '__main__':
     #Connect to CCD and change settings
     alphalasCCD = AlphalasCCD()
-    alphalasCCD.updateSetting("integration_time", 25000)
-    alphalasCCD.updateSetting("shots_per_acquisition", 100)
+    alphalasCCD.updateSetting("integration_time", 5000)
+    alphalasCCD.updateSetting("shots_per_acquisition", 1)
 
     #Retreive the data
     data = alphalasCCD.readoutData()
     print(data)
-    
-    x = [i for i in range(1,3649)]
-    x = np.array(x)
-    
-    y = np.column_stack((x,data))
-    
-    print(y,y.shape)
-    
-    np.savetxt('F5460_21,15.txt',y,fmt = "%.4f")
