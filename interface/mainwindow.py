@@ -32,13 +32,15 @@ class MainWindow(QMainWindow):
 
         self.botao_iniciar = QAction("Iniciar Aquisição", self)
         self.botao_parar = QAction("Parar Aquisição", self)
-        self.botao_motor = QAction("Controle do Motor", self)
         self.botao_config_ccd = QAction("Configurar CCD", self)
+        self.botao_motor = QAction("Controle do Motor", self)
+        
 
         toolbar.addAction(self.botao_iniciar)
         toolbar.addAction(self.botao_parar)
-        toolbar.addAction(self.botao_motor)
         toolbar.addAction(self.botao_config_ccd)
+        toolbar.addAction(self.botao_motor)
+        
 
         self.botao_iniciar.triggered.connect(self.iniciar_thread_aquisicao)
         self.botao_parar.triggered.connect(self.parar_thread_aquisicao)

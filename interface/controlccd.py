@@ -20,7 +20,11 @@ class CCDWorker(QObject):
         self.ccd.updateSetting("shots_per_acquisition", self.shots_per_acquisition)
         self.ccd.updateSetting('dark_correction',self.dark_correction)
 
-        self.config = CCDConfig()
+        self.config = CCDConfig(
+                integration_time=self.integration_time,
+                shots_per_acquisition=self.shots_per_acquisition,
+                dark_correction=self.dark_correction
+                )
 
         # Conecta os sinais para atualizar o hardware em tempo real
         self.config.integration_time_changed.connect(self.update_integration_time)
