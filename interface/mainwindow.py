@@ -1,70 +1,99 @@
-from PyQt5.QtCore import pyqtSignal, QObject, Qt
+from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction
 import pyqtgraph as pg
 import numpy as np
 import sys
-
-# =====================================
-# Classe que simula o sensor (emite sinal com dados)
-# =====================================
-class Sensor(QObject):
-    # define um sinal que carrega os dados (x, y)
-    data_ready = pyqtSignal(np.ndarray, np.ndarray)
-
-    def emitir_dados(self):
-        """Simula envio de dados"""
-        x = np.linspace(0, 1, 2000) + np.random.normal(0,2)
-        y = np.sin(2 * np.pi * 10 * x) 
-        self.data_ready.emit(x, y)  # emite o sinal com os dados
+from .controlccd import * 
+from .controlmotor import *
 
 
 # =====================================
-# Janela principal
+# Janela Principal da Aplicação
 # =====================================
 class MainWindow(QMainWindow):
+    start_worker = pyqtSignal()
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PGS - Espectrometro")
+        self.setWindowTitle("PGS - Espectrometro (Threaded)")
         self.resize(800, 400)
 
-        # ---------- TOOLBAR ----------
+        # Thread e Worker
+        self.sensor_thread = QThread()
+        self.worker = CCDWorker(integration_time = 50_000, shots_per_acquisition = 10, dark_correction = True)
+        self.worker.moveToThread(self.sensor_thread)
+        self.sensor_thread.started.connect(self.worker.start_acquisition)
+        self.worker.data_ready.connect(self.atualizar_grafico)
+        self.start_worker.connect(self.worker.start_acquisition)
+
+        # Toolbar
         toolbar = QToolBar("Ferramentas")
         self.addToolBar(Qt.TopToolBarArea, toolbar)
 
-        # Exemplo de botões
-        botao_iniciar = QAction("Iniciar", self)
-        botao_parar = QAction("Parar", self)
-        toolbar.addAction(botao_iniciar)
-        toolbar.addAction(botao_parar)
+        self.botao_iniciar = QAction("Iniciar Aquisição", self)
+        self.botao_parar = QAction("Parar Aquisição", self)
+        self.botao_motor = QAction("Controle do Motor", self)
+        self.botao_config_ccd = QAction("Configurar CCD", self)
 
-        # ---------- ÁREA CENTRAL ----------
+        toolbar.addAction(self.botao_iniciar)
+        toolbar.addAction(self.botao_parar)
+        toolbar.addAction(self.botao_motor)
+        toolbar.addAction(self.botao_config_ccd)
+
+        self.botao_iniciar.triggered.connect(self.iniciar_thread_aquisicao)
+        self.botao_parar.triggered.connect(self.parar_thread_aquisicao)
+        self.botao_motor.triggered.connect(self.abrir_janela_motor)
+        self.botao_config_ccd.triggered.connect(self.abrir_janela_config_ccd)
+
+        self.botao_parar.setEnabled(False)
+
+        # Área Central com gráfico
         central_widget = QWidget()
         layout = QVBoxLayout(central_widget)
 
         self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setLabel('left', 'Intensidade')
+        self.plot_widget.setLabel('bottom', 'Pixel')
+        self.plot_widget.setTitle('Espectro CCD')
+
+        self.plot_widget.setYRange(0, 1000)
+
         layout.addWidget(self.plot_widget)
         self.setCentralWidget(central_widget)
 
-        # Cria uma referência à curva (para atualizar depois)
-        self.curva = self.plot_widget.plot([], [])
+        self.curva = self.plot_widget.plot([], [], pen='y')
 
-        # ---------- SENSOR ----------
-        self.sensor = Sensor()
-        self.sensor.data_ready.connect(self.atualizar_grafico)
+        QCoreApplication.instance().aboutToQuit.connect(self.clean_up)
 
-        # Liga o botão para simular aquisição de dados
-        botao_iniciar.triggered.connect(self.sensor.emitir_dados)
+    def iniciar_thread_aquisicao(self):
+        if not self.sensor_thread.isRunning():
+            self.sensor_thread.start()
+            self.botao_iniciar.setEnabled(False)
+            self.botao_parar.setEnabled(True)
 
-    # Slot que atualiza o gráfico quando chegam novos dados
+    def parar_thread_aquisicao(self):
+        if self.sensor_thread.isRunning():
+            self.worker.stop_acquisition()
+            if not self.sensor_thread.wait(2000):
+                print("Aviso: Thread não encerrou a tempo. Terminando...")
+                self.sensor_thread.terminate()
+                self.sensor_thread.wait()
+            self.botao_iniciar.setEnabled(True)
+            self.botao_parar.setEnabled(False)
+            print("Thread encerrada.")
+
     def atualizar_grafico(self, x, y):
         self.curva.setData(x, y)
 
+    def abrir_janela_motor(self):
+        self.motor_control = MotorControl(self)
+        self.motor_control.show()
 
-# =====================================
-# Execução do app
-# =====================================
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+    def abrir_janela_config_ccd(self):
+        dialog = CCDConfigDialog(self.worker.config, self)
+        dialog.exec_()    
+
+    def clean_up(self):
+        print("Limpando recursos e parando thread...")
+        self.parar_thread_aquisicao()
+

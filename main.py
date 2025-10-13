@@ -1,9 +1,12 @@
 from PyQt5.QtWidgets import QApplication
 import sys
 from interface.mainwindow import MainWindow
+from interface.controlccd import * 
+from interface.controlmotor import *
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show() 
-    app.exec()
+    sys.exit(app.exec_())
