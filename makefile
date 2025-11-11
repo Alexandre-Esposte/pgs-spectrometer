@@ -1,2 +1,2 @@
-interface:
-	@uv run streamlit run tests/interface.py
+dash:
+	@uv run main.py
