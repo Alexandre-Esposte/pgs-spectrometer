@@ -1,8 +1,11 @@
-
-from AlphalasCCD import *
-from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QDialog, QLabel, QSpinBox, QCheckBox,QVBoxLayout, QHBoxLayout, QPushButton
 import time
+
+
+from ccd.AlphalasCCD import *
+from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QDialog, QLabel, 
+                             QSpinBox, QCheckBox,QVBoxLayout, QHBoxLayout, QPushButton)
+
 
 class CCDWorker(QObject):
     # Sinal que carrega os dados (x, y) para o thread principal

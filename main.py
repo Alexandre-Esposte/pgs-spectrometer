@@ -1,8 +1,7 @@
-from PyQt5.QtWidgets import QApplication
 import sys
+
+from PyQt5.QtWidgets import QApplication
 from interface.mainwindow import MainWindow
-from interface.controlccd import * 
-from interface.controlmotor import *
 
 
 if __name__ == "__main__":

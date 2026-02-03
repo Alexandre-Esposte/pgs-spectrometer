@@ -1,101 +1,104 @@
-from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction
-import pyqtgraph as pg
 import numpy as np
-import sys
-from .controlccd import * 
-from .controlmotor import *
+import pyqtgraph as pg
+
+from pathlib import Path
+from PyQt5.QtGui import QIcon
+from configs.ccd_configs import ccdGraphStyles
+from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QLabel, QSpinBox, QComboBox
 
 
-# =====================================
-# Janela Principal da Aplicação
-# =====================================
+
 class MainWindow(QMainWindow):
-    start_worker = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PGS - Espectrometro (Threaded)")
+
+        self.setWindowTitle("PGS - Espectrometro CCD")
         self.resize(800, 400)
 
-        # Thread e Worker
-        self.sensor_thread = QThread()
-        self.worker = CCDWorker(integration_time = 50_000, shots_per_acquisition = 10, dark_correction = True)
-        self.worker.moveToThread(self.sensor_thread)
-        self.sensor_thread.started.connect(self.worker.start_acquisition)
-        self.worker.data_ready.connect(self.atualizar_grafico)
-        self.start_worker.connect(self.worker.start_acquisition)
 
-        # Toolbar
-        toolbar = QToolBar("Ferramentas")
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
+        # Cria o widget que conterá o gráfico dos dados do CCD
+        self.ccd_graph = pg.PlotWidget()
+        ccdGraphStyles(self.ccd_graph)
 
-        self.botao_iniciar = QAction("Iniciar Aquisição", self)
-        self.botao_parar = QAction("Parar Aquisição", self)
-        self.botao_config_ccd = QAction("Configurar CCD", self)
-        self.botao_motor = QAction("Controle do Motor", self)
+
+        # Disponibilizando widgets na janela principal
+        self.setCentralWidget(self.ccd_graph)
+
         
+        # Tool bars com funcionalidade de controle do CCD
+        toolbar_ccd = QToolBar("CCD Controls")
+        toolbar_ccd.setMovable(False)
 
-        toolbar.addAction(self.botao_iniciar)
-        toolbar.addAction(self.botao_parar)
-        toolbar.addAction(self.botao_config_ccd)
-        toolbar.addAction(self.botao_motor)
+        # Botoes de start, pause e stop
+        self.action_start = QAction(QIcon("icons/start.png"),'Start CCD', self)
+        self.action_stop = QAction(QIcon("icons/stop.png"), 'Stop CCD', self)
+        self.action_pause = QAction(QIcon("icons/pause.png"), 'Pause CCD', self)
+
+        toolbar_ccd.addAction(self.action_start)
+        toolbar_ccd.addSeparator()
+        toolbar_ccd.addAction(self.action_pause)
+        toolbar_ccd.addSeparator()
+        toolbar_ccd.addAction(self.action_stop)
+
+        self.action_start.triggered.connect(self.start_ccd)
+        self.action_stop.triggered.connect(self.stop_ccd)
+        self.action_pause.triggered.connect(self.pause_ccd)
         
+        
+        # Integration Time Controls
+        toolbar_ccd.addSeparator()
+        toolbar_ccd.addWidget(QLabel("Integration time:"))
 
-        self.botao_iniciar.triggered.connect(self.iniciar_thread_aquisicao)
-        self.botao_parar.triggered.connect(self.parar_thread_aquisicao)
-        self.botao_motor.triggered.connect(self.abrir_janela_motor)
-        self.botao_config_ccd.triggered.connect(self.abrir_janela_config_ccd)
+        self.integration_spin = QSpinBox()
+        self.integration_spin.setRange(1, 10000)
 
-        self.botao_parar.setEnabled(False)
+        toolbar_ccd.addWidget(self.integration_spin)
+        
+        self.ordem_grandeza = QComboBox()
+        self.ordem_grandeza.addItems(["s", "ms", "us"])
+        toolbar_ccd.addWidget(self.ordem_grandeza)
 
-        # Área Central com gráfico
-        central_widget = QWidget()
-        layout = QVBoxLayout(central_widget)
 
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setLabel('left', 'Intensidade')
-        self.plot_widget.setLabel('bottom', 'Pixel')
-        self.plot_widget.setTitle('Espectro CCD')
 
-        self.plot_widget.setYRange(0, 1000)
+        # Scans to average controls
+        toolbar_ccd.addSeparator()
+        toolbar_ccd.addWidget(QLabel("Scans to average:"))
+        self.average_spin = QSpinBox()
+        self.average_spin.setRange(1, 100)
+        toolbar_ccd.addWidget(self.average_spin)
 
-        layout.addWidget(self.plot_widget)
-        self.setCentralWidget(central_widget)
 
-        self.curva = self.plot_widget.plot([], [], pen='y')
+        # Apply
+        self.action_apply = QAction("Aplicar Configurações", self)
+        self.action_apply.triggered.connect(self.apply_settings)
 
-        QCoreApplication.instance().aboutToQuit.connect(self.clean_up)
+        self.addToolBar(toolbar_ccd)
+        toolbar_ccd.addAction(self.action_apply)
 
-    def iniciar_thread_aquisicao(self):
-        if not self.sensor_thread.isRunning():
-            self.sensor_thread.start()
-            self.botao_iniciar.setEnabled(False)
-            self.botao_parar.setEnabled(True)
 
-    def parar_thread_aquisicao(self):
-        if self.sensor_thread.isRunning():
-            self.worker.stop_acquisition()
-            if not self.sensor_thread.wait(2000):
-                print("Aviso: Thread não encerrou a tempo. Terminando...")
-                self.sensor_thread.terminate()
-                self.sensor_thread.wait()
-            self.botao_iniciar.setEnabled(True)
-            self.botao_parar.setEnabled(False)
-            print("Thread encerrada.")
+    def apply_settings(self):
+        """
+        Aplica configurações ajustadas pelo usuario no CCD
+        """
+        
+        integration_time = self.integration_spin.value()
+        ordem_grandeza = self.ordem_grandeza.currentText()
 
-    def atualizar_grafico(self, x, y):
-        self.curva.setData(x, y)
+        if ordem_grandeza == "ms":
+            integration_time *= 1e-3
+        elif ordem_grandeza == "us":
+            integration_time *= 1e-6
 
-    def abrir_janela_motor(self):
-        self.motor_control = MotorControl(self)
-        self.motor_control.show()
+        scans_to_average = self.average_spin.value()
 
-    def abrir_janela_config_ccd(self):
-        dialog = CCDConfigDialog(self.worker.config, self)
-        dialog.exec_()    
+        print(f"Integration time: {integration_time} s")
+        print(f"Scans to average: {scans_to_average}")
 
-    def clean_up(self):
-        print("Limpando recursos e parando thread...")
-        self.parar_thread_aquisicao()
-
+    def start_ccd(self):
+        print("Iniciando aquisição do CCD...")
+    def stop_ccd(self):
+        print("Parando aquisição do CCD...")
+    def pause_ccd(self):
+        print("Pausando aquisição do CCD...")
