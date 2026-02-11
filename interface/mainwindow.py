@@ -3,9 +3,9 @@ import pyqtgraph as pg
 
 from pathlib import Path
 from PyQt5.QtGui import QIcon
-from configs.ccd_configs import ccdGraphStyles
+from layouts.ccd_graph import ccdGraphStyles
 from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QLabel, QSpinBox, QComboBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QLabel, QSpinBox, QComboBox, QCheckBox
 
 
 
@@ -45,7 +45,11 @@ class MainWindow(QMainWindow):
         self.action_start.triggered.connect(self.start_ccd)
         self.action_stop.triggered.connect(self.stop_ccd)
         self.action_pause.triggered.connect(self.pause_ccd)
-        
+
+        #Box to dark correction
+        toolbar_ccd.addSeparator()
+        self.dark_correction_checkbox = QCheckBox("Dark Correction")
+        toolbar_ccd.addWidget(self.dark_correction_checkbox)
         
         # Integration Time Controls
         toolbar_ccd.addSeparator()
@@ -61,13 +65,13 @@ class MainWindow(QMainWindow):
         toolbar_ccd.addWidget(self.ordem_grandeza)
 
 
-
         # Scans to average controls
         toolbar_ccd.addSeparator()
         toolbar_ccd.addWidget(QLabel("Scans to average:"))
         self.average_spin = QSpinBox()
         self.average_spin.setRange(1, 100)
         toolbar_ccd.addWidget(self.average_spin)
+
 
 
         # Apply
@@ -93,8 +97,11 @@ class MainWindow(QMainWindow):
 
         scans_to_average = self.average_spin.value()
 
+        dark_correction = self.dark_correction_checkbox.isChecked()
+
         print(f"Integration time: {integration_time} s")
         print(f"Scans to average: {scans_to_average}")
+        print(f"Dark correction: {dark_correction}")
 
     def start_ccd(self):
         print("Iniciando aquisição do CCD...")
