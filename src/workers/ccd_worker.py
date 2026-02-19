@@ -1,75 +1,72 @@
-from AlphalasCCD import *
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
-import logging
+import time
+import numpy as np
 
+# from ccd.AlphalasCCD import *
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QTimer
 
-logger = logging.getLogger(__main__)
-console_handler = logging.StreamHandler()
+class CCDWorker(QObject):
 
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s- %(name)s : %(message)s')
-console_handler.setFormatter(console_formatter)
-console_handler.setLevel("DEBUG")
+    data = pyqtSignal(np.ndarray)
 
-
-logger.addHandler(console_handler)
-
-
-class WorkerCCD(QObject):
-
-    emissor = pyqtSignal(list, list)
-
-    finished = pyqtSignal()
-
-    def __init__(self, integration_time: int = 1000, shots_per_acquisition: int = 1, dark_correction: bool = True):
+    def __init__(self):
         super().__init__()
 
-        self._running = False
-        self._thread = None
+        self.integration_time = 0.1 #100ms
+        self.scans_to_average = 1
+        self.dark_correction = False
 
-        self.integration_time = integration_time
-        self.shots_per_acquisition = shots_per_acquisition
-        self.dark_correction = dark_correction
+        self.aquisition_frequency = 10  #ms
+        self.timer = None
 
-        self.ccd = AlphalasCCD()
-        self.ccd.updateSetting("integration_time", self.integration_time)
-        self.ccd.updateSetting("shots_per_acquisition", self.shots_per_acquisition)
-        self.ccd.updateSetting('dark_correction',self.dark_correction)
+        # self.ccd = AlphalasCCD()
 
-    def run(self):
-        """Método principal que inicia o loop de aquisição de dados."""
+    @pyqtSlot()
+    def initialize(self):
+        self.timer = QTimer(self)  # parent = worker
+        self.timer.setInterval(self.aquisition_frequency)
+        self.timer.timeout.connect(self._acquire)
 
-        self._running = True
-        logger.debug("Aquisição de dados iniciada.")
-        
-        while self._running:
-            try:
-                # 1. Retreive the data
-                data = self.ccd.readoutData()
-                
-                # 2. Prepara os dados para emissão
-                y = list(data)
-                x = [xi for xi in range(len(y))]
-                
-                # 3. Emite o sinal para o thread principal (GUI)
-                self.data_ready.emit(x, y)
-                
-                # Pausa para evitar 100% de uso da CPU e respeitar a taxa de amostragem
-                # Note: O tempo de integração já é uma limitação, mas essa pausa
-                # garante que o loop não seja excessivamente rápido.
-                time.sleep(0.1) 
-                
-            except Exception as e:
-                logger.error(f"Erro durante a aquisição: {e}")
-                # Em caso de erro, é bom parar o loop
-                self._running = False
-            
-        logger.debug("Aquisição de dados finalizada.")
+        self.timer.start()
 
+    @pyqtSlot()
     def start(self):
-        """Inicializa captura do ccd"""
-        self._running = True
-        self.run()
+         if self.timer and not self.timer.isActive():
+            self.timer.start()
 
+    @pyqtSlot()
     def stop(self):
-        """Finaliza captura do ccd"""
-        self._running = False
+        if self.timer and self.timer.isActive():
+            self.timer.stop()
+
+
+    @pyqtSlot()
+    def pause(self):
+        if self.timer and self.timer.isActive():
+            self.timer.stop()
+
+        
+    @pyqtSlot(dict)
+    def update_settings(self, settings):
+
+        self.integration_time = settings["integration_time"]
+        self.scans_to_average = settings["scans_to_average"]
+        self.dark_correction = settings["dark_correction"]
+
+        self.ccd.updateSetting("integration_time", self.integration_time)
+        self.ccd.updateSetting("shots_per_acquisition", self.scans_to_average)
+        self.ccd.updateSetting('dark_correction', self.dark_correction)
+
+    def _acquire(self):
+                 
+        if not self.timer.isActive():
+            return
+
+        # Mockando dados do ccd
+        x = np.linspace(0,100, 2048)
+        signal = np.sin(x) + np.random.normal(0, 0.05, size = x.shape)
+
+        self.data.emit(signal)
+            
+
+    
+

@@ -3,109 +3,147 @@ import pyqtgraph as pg
 
 from pathlib import Path
 from PyQt5.QtGui import QIcon
-from layouts.ccd_graph import ccdGraphStyles
 from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QLabel, QSpinBox, QComboBox, QCheckBox
 
 
+# Configurações do grafico do pyqtraph
+from layouts.ccd_graph import ccdGraphStyles
+
+# Widgets personalizados
+from widgets.acquisition_settings import AcquisitionControls
+from widgets.ccd_settings import CCDSettingsWidget
+from widgets.scale_controls import ScaleControlsWidget
+
+# Workers
+from workers.ccd_worker import CCDWorker
+
 
 class MainWindow(QMainWindow):
+    
+    #-------------------------Criando sinais para botoes----------------    
+    start_signal = pyqtSignal()
+    stop_signal = pyqtSignal()
+    pause_signal = pyqtSignal()
+    update_settings_ccd_signal = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
 
+
         self.setWindowTitle("PGS - Espectrometro CCD")
-        self.resize(800, 400)
+        self.resize(900, 500)
 
+   
+        #---------------------------Configurando Threads  e Workers---------------------
+        self._setup_worker()
 
-        # Cria o widget que conterá o gráfico dos dados do CCD
+        #---------------------------Cria o widget que conterá o gráfico dos dados do CCD----------------------------
         self.ccd_graph = pg.PlotWidget()
         ccdGraphStyles(self.ccd_graph)
-
-
-        # Disponibilizando widgets na janela principal
         self.setCentralWidget(self.ccd_graph)
+        self.curve = self.ccd_graph.plot()
 
         
-        # Tool bars com funcionalidade de controle do CCD
-        toolbar_ccd = QToolBar("CCD Controls")
-        toolbar_ccd.setMovable(False)
+       # =========================
+        # Toolbar 1 - CCD Acquisition and Settings
+        # =========================
+        self.toolbar_acq = QToolBar("Acquisition")
+        self.toolbar_acq.setMovable(False)
 
-        # Botoes de start, pause e stop
-        self.action_start = QAction(QIcon("icons/start.png"),'Start CCD', self)
-        self.action_stop = QAction(QIcon("icons/stop.png"), 'Stop CCD', self)
-        self.action_pause = QAction(QIcon("icons/pause.png"), 'Pause CCD', self)
+        self.acq_controls = AcquisitionControls()
+        self.ccd_settings = CCDSettingsWidget()
+            
+        self.toolbar_acq.addWidget(self.acq_controls)
+        self.toolbar_acq.addSeparator()  # Adiciona um separador visual entre os grupos de controles
+        self.toolbar_acq.addWidget(self.ccd_settings)
 
-        toolbar_ccd.addAction(self.action_start)
-        toolbar_ccd.addSeparator()
-        toolbar_ccd.addAction(self.action_pause)
-        toolbar_ccd.addSeparator()
-        toolbar_ccd.addAction(self.action_stop)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar_acq)
 
-        self.action_start.triggered.connect(self.start_ccd)
-        self.action_stop.triggered.connect(self.stop_ccd)
-        self.action_pause.triggered.connect(self.pause_ccd)
+        # =========================
+        # Break (nova linha)
+        # =========================
+        self.addToolBarBreak(Qt.TopToolBarArea)
 
-        #Box to dark correction
-        toolbar_ccd.addSeparator()
-        self.dark_correction_checkbox = QCheckBox("Dark Correction")
-        toolbar_ccd.addWidget(self.dark_correction_checkbox)
-        
-        # Integration Time Controls
-        toolbar_ccd.addSeparator()
-        toolbar_ccd.addWidget(QLabel("Integration time:"))
+        # # =========================
+        # # Toolbar 2 - Settings
+        # # =========================
+        # self.toolbar_settings = QToolBar("Settings")
+        # self.toolbar_settings.setMovable(False)
+        self.toolbar_graph_settings = QToolBar("Graph Settings")
+        self.toolbar_graph_settings.setMovable(False)
 
-        self.integration_spin = QSpinBox()
-        self.integration_spin.setRange(1, 10000)
+        self.scale_controls = ScaleControlsWidget()
+        self.toolbar_graph_settings.addWidget(self.scale_controls)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar_graph_settings)
 
-        toolbar_ccd.addWidget(self.integration_spin)
-        
-        self.ordem_grandeza = QComboBox()
-        self.ordem_grandeza.addItems(["s", "ms", "us"])
-        toolbar_ccd.addWidget(self.ordem_grandeza)
+        # =========================
+        # Connections
+        # =========================
+        self._connect_signals()
 
+    def _connect_signals(self):
 
-        # Scans to average controls
-        toolbar_ccd.addSeparator()
-        toolbar_ccd.addWidget(QLabel("Scans to average:"))
-        self.average_spin = QSpinBox()
-        self.average_spin.setRange(1, 100)
-        toolbar_ccd.addWidget(self.average_spin)
+        # Acquisition
+        self.acq_controls.start_clicked.connect(self.start_ccd)
+        self.acq_controls.pause_clicked.connect(self.pause_ccd)
+        self.acq_controls.stop_clicked.connect(self.stop_ccd)
 
+        # Settings
+        self.ccd_settings.settings_applied.connect(self.apply_settings)
 
-
-        # Apply
-        self.action_apply = QAction("Aplicar Configurações", self)
-        self.action_apply.triggered.connect(self.apply_settings)
-
-        self.addToolBar(toolbar_ccd)
-        toolbar_ccd.addAction(self.action_apply)
-
-
-    def apply_settings(self):
-        """
-        Aplica configurações ajustadas pelo usuario no CCD
-        """
-        
-        integration_time = self.integration_spin.value()
-        ordem_grandeza = self.ordem_grandeza.currentText()
-
-        if ordem_grandeza == "ms":
-            integration_time *= 1e-3
-        elif ordem_grandeza == "us":
-            integration_time *= 1e-6
-
-        scans_to_average = self.average_spin.value()
-
-        dark_correction = self.dark_correction_checkbox.isChecked()
-
-        print(f"Integration time: {integration_time} s")
-        print(f"Scans to average: {scans_to_average}")
-        print(f"Dark correction: {dark_correction}")
-
+        # Scale
+        self.scale_controls.autoscale_clicked.connect(self.auto_scale_function)
+    
+    
+    
     def start_ccd(self):
         print("Iniciando aquisição do CCD...")
+        self.start_signal.emit()
+
     def stop_ccd(self):
         print("Parando aquisição do CCD...")
+        self.stop_signal.emit()
+        self.curve.setData(np.zeros(2048))
+
     def pause_ccd(self):
         print("Pausando aquisição do CCD...")
+        self.pause_signal.emit()
+
+    def auto_scale_function(self):
+        print("Ajustando escala do gráfico...")
+
+    def apply_settings(self, settings: dict):
+        print("Aplicando configurações:")
+        print(settings)
+        self.worker.update_settings(settings)
+        
+
+    def auto_scale_function(self):
+        print("Auto scale acionado.")
+        self.ccd_graph.enableAutoRange()
+
+    def update_graph(self, data: np.ndarray):
+        self.curve.setData(data)
+
+
+    def _setup_worker(self):
+
+        self.thread = QThread()
+        self.worker = CCDWorker()
+
+        self.worker.moveToThread(self.thread)
+
+        # Quando a thread iniciar → inicializa o worker (cria o timer na thread correta)
+        self.thread.started.connect(self.worker.initialize)
+
+        # Comunicação worker → GUI
+        self.worker.data.connect(self.update_graph)
+
+        self.start_signal.connect(self.worker.start)
+        self.stop_signal.connect(self.worker.stop)
+        self.pause_signal.connect(self.worker.pause)
+        self.update_settings_ccd_signal.connect(self.worker.update_settings)
+
+        self.thread.start()
+
