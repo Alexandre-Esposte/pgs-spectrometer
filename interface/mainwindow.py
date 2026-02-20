@@ -14,19 +14,15 @@ from layouts.ccd_graph import ccdGraphStyles
 from widgets.acquisition_settings import AcquisitionControls
 from widgets.ccd_settings import CCDSettingsWidget
 from widgets.scale_controls import ScaleControlsWidget
+from widgets.motor_controls import MotorControlsWidget
 
 # Workers
 from workers.ccd_worker import CCDWorker
+from workers.motor_worker import MotorWorker
 
 
 class MainWindow(QMainWindow):
     
-    #-------------------------Criando sinais para botoes----------------    
-    start_signal = pyqtSignal()
-    stop_signal = pyqtSignal()
-    pause_signal = pyqtSignal()
-    update_settings_ccd_signal = pyqtSignal(dict)
-
     def __init__(self):
         super().__init__()
 
@@ -42,7 +38,10 @@ class MainWindow(QMainWindow):
         self.ccd_graph = pg.PlotWidget()
         ccdGraphStyles(self.ccd_graph)
         self.setCentralWidget(self.ccd_graph)
-        self.curve = self.ccd_graph.plot()
+
+        self.ccd_graph.enableAutoRange(x=True, y=False)
+
+        self.curve = self.ccd_graph.plot(pen='r')
 
         
        # =========================
@@ -66,16 +65,23 @@ class MainWindow(QMainWindow):
         self.addToolBarBreak(Qt.TopToolBarArea)
 
         # # =========================
-        # # Toolbar 2 - Settings
+        # # Toolbar 2 - Scale
         # # =========================
-        # self.toolbar_settings = QToolBar("Settings")
-        # self.toolbar_settings.setMovable(False)
+
         self.toolbar_graph_settings = QToolBar("Graph Settings")
         self.toolbar_graph_settings.setMovable(False)
 
         self.scale_controls = ScaleControlsWidget()
         self.toolbar_graph_settings.addWidget(self.scale_controls)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar_graph_settings)
+
+        # # =========================
+        # # Toolbar 2 - Motor
+        # # =========================
+        self.toolbar_graph_settings.addSeparator()
+        self.motor_controls = MotorControlsWidget()
+        self.toolbar_graph_settings.addWidget(self.motor_controls)
+
 
         # =========================
         # Connections
@@ -85,65 +91,69 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
 
         # Acquisition
-        self.acq_controls.start_clicked.connect(self.start_ccd)
-        self.acq_controls.pause_clicked.connect(self.pause_ccd)
-        self.acq_controls.stop_clicked.connect(self.stop_ccd)
+        self.acq_controls.start_clicked.connect(self.ccd_worker.start)
+        self.acq_controls.pause_clicked.connect(self.ccd_worker.pause)
+        self.acq_controls.stop_clicked.connect (self.ccd_worker.stop)
 
         # Settings
-        self.ccd_settings.settings_applied.connect(self.apply_settings)
+        self.ccd_settings.settings_applied.connect(self.ccd_worker.update_settings)
 
         # Scale
         self.scale_controls.autoscale_clicked.connect(self.auto_scale_function)
+
+        # Motor buttons
+        self.motor_controls.motor_command.connect(self.motor_worker.send_command)
+
     
     
-    
-    def start_ccd(self):
-        print("Iniciando aquisição do CCD...")
-        self.start_signal.emit()
-
-    def stop_ccd(self):
-        print("Parando aquisição do CCD...")
-        self.stop_signal.emit()
-        self.curve.setData(np.zeros(2048))
-
-    def pause_ccd(self):
-        print("Pausando aquisição do CCD...")
-        self.pause_signal.emit()
-
-    def auto_scale_function(self):
-        print("Ajustando escala do gráfico...")
-
-    def apply_settings(self, settings: dict):
-        print("Aplicando configurações:")
-        print(settings)
-        self.worker.update_settings(settings)
-        
-
     def auto_scale_function(self):
         print("Auto scale acionado.")
         self.ccd_graph.enableAutoRange()
 
+
     def update_graph(self, data: np.ndarray):
         self.curve.setData(data)
 
-
     def _setup_worker(self):
 
-        self.thread = QThread()
-        self.worker = CCDWorker()
+        # =========================
+        # CCD Worker
+        # =========================
+        self.ccd_thread = QThread()
+        self.ccd_worker = CCDWorker()
 
-        self.worker.moveToThread(self.thread)
+        self.ccd_worker.moveToThread(self.ccd_thread)
+        self.ccd_thread.started.connect(self.ccd_worker.initialize)
+        self.ccd_worker.data.connect(self.update_graph)
+        self.ccd_thread.start()
 
-        # Quando a thread iniciar → inicializa o worker (cria o timer na thread correta)
-        self.thread.started.connect(self.worker.initialize)
+        # =========================
+        # Motor Worker
+        # =========================
+        self.motor_thread = QThread()
+        self.motor_worker = MotorWorker()
 
-        # Comunicação worker → GUI
-        self.worker.data.connect(self.update_graph)
+        self.motor_worker.moveToThread(self.motor_thread)
+        self.motor_thread.started.connect(self.motor_worker.initialize)
 
-        self.start_signal.connect(self.worker.start)
-        self.stop_signal.connect(self.worker.stop)
-        self.pause_signal.connect(self.worker.pause)
-        self.update_settings_ccd_signal.connect(self.worker.update_settings)
+        self.motor_thread.start()
 
-        self.thread.start()
+    def closeEvent(self, event):
+
+        print("Encerrando threads...")
+
+        # Finaliza thread do CCD
+        if self.ccd_thread.isRunning():
+            self.ccd_thread.quit()
+            self.ccd_thread.wait()
+
+        # Finaliza thread do Motor
+        if self.motor_thread.isRunning():
+            self.motor_thread.quit()
+            self.motor_thread.wait()
+
+        print("Threads finalizadas com sucesso.")
+
+        event.accept()
+
 

@@ -18,10 +18,10 @@ class CCDWorker(QObject):
         self.aquisition_frequency = 10  #ms
         self.timer = None
 
-        # self.ccd = AlphalasCCD()
 
     @pyqtSlot()
     def initialize(self):
+        # self.ccd = AlphalasCCD()
         self.timer = QTimer(self)  # parent = worker
         self.timer.setInterval(self.aquisition_frequency)
         self.timer.timeout.connect(self._acquire)
@@ -47,7 +47,7 @@ class CCDWorker(QObject):
         
     @pyqtSlot(dict)
     def update_settings(self, settings):
-
+        print(settings)
         self.integration_time = settings["integration_time"]
         self.scans_to_average = settings["scans_to_average"]
         self.dark_correction = settings["dark_correction"]
@@ -63,7 +63,7 @@ class CCDWorker(QObject):
 
         # Mockando dados do ccd
         x = np.linspace(0,100, 2048)
-        signal = np.sin(x) + np.random.normal(0, 0.05, size = x.shape)
+        signal = np.random.uniform(1, 20, size = x.shape) * np.sin(x) + np.random.normal(0, 0.05, size = x.shape)
 
         self.data.emit(signal)
             

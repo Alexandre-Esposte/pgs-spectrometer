@@ -36,6 +36,7 @@ class CCDSettingsWidget(QWidget):
         layout.addWidget(self.average_spin)
         layout.addWidget(self.apply_button)
 
+        # Coneectando botão
         self.apply_button.clicked.connect(self._emit_settings)
 
     def _emit_settings(self):
