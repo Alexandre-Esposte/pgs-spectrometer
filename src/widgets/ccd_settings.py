@@ -18,10 +18,10 @@ class CCDSettingsWidget(QWidget):
         self.dark_checkbox = QCheckBox("Dark Correction")
 
         self.integration_spin = QSpinBox()
-        self.integration_spin.setRange(1, 10000)
+        self.integration_spin.setRange(10, 60_000_000)
 
         self.ordem = QComboBox()
-        self.ordem.addItems(["s", "ms", "us"])
+        self.ordem.addItems(["us"])
 
         self.average_spin = QSpinBox()
         self.average_spin.setRange(1, 100)
@@ -36,7 +36,7 @@ class CCDSettingsWidget(QWidget):
         layout.addWidget(self.average_spin)
         layout.addWidget(self.apply_button)
 
-        # Coneectando botão
+        # Conectando botão
         self.apply_button.clicked.connect(self._emit_settings)
 
     def _emit_settings(self):
@@ -44,10 +44,12 @@ class CCDSettingsWidget(QWidget):
         integration = self.integration_spin.value()
         ordem = self.ordem.currentText()
 
-        if ordem == "ms":
+        if ordem == "s":
+            integration *= 1e-6
+        elif ordem == "ms":
             integration *= 1e-3
         elif ordem == "us":
-            integration *= 1e-6
+            integration *= 1
 
         settings = {
             "integration_time": integration,

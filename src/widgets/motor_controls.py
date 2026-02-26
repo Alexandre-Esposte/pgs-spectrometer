@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSpinBox, QComboBox, QFrame
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSpinBox, QComboBox, QFrame, QLabel
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QIcon
 
@@ -12,10 +12,10 @@ class MotorControlsWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self.spin_velocity = QSpinBox()
-        self.spin_velocity.setRange(1,255)
+        self.spin_velocity.setRange(3,255)
 
         self.combobox_direction = QComboBox()
-        self.combobox_direction.addItems(['hor.','ant. hor.'])
+        self.combobox_direction.addItems(['diminuir angulo','aumentar angulo'])
 
         self.btn_start = QPushButton("Acionar motor")
         self.btn_start.setIcon(QIcon("icons/start.png"))
@@ -23,7 +23,7 @@ class MotorControlsWidget(QWidget):
         self.btn_stop  = QPushButton("Parar motor")
         self.btn_stop.setIcon(QIcon("icons/stop.png"))
 
-            
+        layout.addWidget(QLabel('Tempo de acionamento entre as bobinas:'))
         layout.addWidget(self.spin_velocity)
         layout.addWidget(self.combobox_direction)
         layout.addWidget(self.btn_start)
@@ -37,7 +37,7 @@ class MotorControlsWidget(QWidget):
         velocity = self.spin_velocity.value()
         direction = self.combobox_direction.currentText()
 
-        if direction == "hor.":
+        if direction == "diminuir angulo":
             direction = 0
         else:
             direction = 1
@@ -55,7 +55,7 @@ class MotorControlsWidget(QWidget):
         velocity = self.spin_velocity.value()
         direction = self.combobox_direction.currentText()
 
-        if direction == "hor.":
+        if direction == "diminuir angulo":
             direction = 0
         else:
             direction = 1

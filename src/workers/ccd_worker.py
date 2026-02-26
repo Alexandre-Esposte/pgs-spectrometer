@@ -11,11 +11,11 @@ class CCDWorker(QObject):
     def __init__(self):
         super().__init__()
 
-        self.integration_time = 0.1 #100ms
+        self.integration_time = 1000 #1000us -> 1ms
         self.scans_to_average = 1
         self.dark_correction = False
 
-        self.aquisition_frequency = 10  #ms
+        self.aquisition_frequency = 10 #ms
         self.timer = None
 
 
@@ -62,8 +62,9 @@ class CCDWorker(QObject):
             return
 
         # Mockando dados do ccd
-        x = np.linspace(0,100, 2048)
-        signal = np.random.uniform(1, 20, size = x.shape) * np.sin(x) + np.random.normal(0, 0.05, size = x.shape)
+        # x = np.linspace(0,100, 2048)
+        # signal = np.random.uniform(1, 20, size = x.shape) * np.sin(x) + np.random.normal(0, 0.05, size = x.shape)
+        signal = self.ccd.readoutData()
 
         self.data.emit(signal)
             
