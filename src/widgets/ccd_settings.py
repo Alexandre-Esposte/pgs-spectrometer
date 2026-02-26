@@ -21,7 +21,7 @@ class CCDSettingsWidget(QWidget):
         self.integration_spin.setRange(10, 60_000_000)
 
         self.ordem = QComboBox()
-        self.ordem.addItems(["us"])
+        self.ordem.addItems(["s", "ms", "us"])
 
         self.average_spin = QSpinBox()
         self.average_spin.setRange(1, 100)
@@ -45,9 +45,9 @@ class CCDSettingsWidget(QWidget):
         ordem = self.ordem.currentText()
 
         if ordem == "s":
-            integration *= 1e-6
+            integration *= 1e6
         elif ordem == "ms":
-            integration *= 1e-3
+            integration *= 1e3
         elif ordem == "us":
             integration *= 1
 

@@ -11,17 +11,23 @@ class CCDWorker(QObject):
     def __init__(self):
         super().__init__()
 
+        self.ccd = AlphalasCCD()
+
         self.integration_time = 1000 #1000us -> 1ms
         self.scans_to_average = 1
         self.dark_correction = False
 
-        self.aquisition_frequency = 1000#ms
+        self.aquisition_frequency = 10#ms
         self.timer = None
+
+        self.update_settings({
+            "integration_time": self.integration_time,
+            "scans_to_average": self.scans_to_average,
+            "dark_correction": self.dark_correction})
 
 
     @pyqtSlot()
     def initialize(self):
-        self.ccd = AlphalasCCD()
         self.timer = QTimer(self)  # parent = worker
         self.timer.setInterval(self.aquisition_frequency)  # Convertendo microsegundos para milissegundos
         self.timer.timeout.connect(self._acquire)
@@ -60,6 +66,10 @@ class CCDWorker(QObject):
                  
         if not self.timer.isActive():
             return
+
+        # Limpando bufffer do ccd
+        while self.ccd.device.getQueueStatus() > 0:
+            self.ccd.device.read(self.ccd.device.getQueueStatus())
 
         # Mockando dados do ccd
         # x = np.linspace(0,100, 2048)
