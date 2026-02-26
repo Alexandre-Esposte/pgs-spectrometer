@@ -13,7 +13,7 @@ class CCDWorker(QObject):
 
         self.ccd = AlphalasCCD()
 
-        self.integration_time = 1000 #1000us -> 1ms
+        self.integration_time = 100_000 #1.000.000us -> 100ms
         self.scans_to_average = 1
         self.dark_correction = False
 
@@ -53,6 +53,9 @@ class CCDWorker(QObject):
         
     @pyqtSlot(dict)
     def update_settings(self, settings):
+
+        self.stop()
+        time.sleep(2) # Garantindo que o timer foi realmente parado antes de atualizar as configurações
         print(settings)
         self.integration_time = settings["integration_time"]
         self.scans_to_average = settings["scans_to_average"]
@@ -61,6 +64,8 @@ class CCDWorker(QObject):
         self.ccd.updateSetting("integration_time", self.integration_time)
         self.ccd.updateSetting("shots_per_acquisition", self.scans_to_average)
         self.ccd.updateSetting('dark_correction', self.dark_correction)
+
+        self.start()
 
     def _acquire(self):
                  

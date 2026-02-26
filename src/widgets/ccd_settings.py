@@ -18,7 +18,7 @@ class CCDSettingsWidget(QWidget):
         self.dark_checkbox = QCheckBox("Dark Correction")
 
         self.integration_spin = QSpinBox()
-        self.integration_spin.setRange(10, 60_000_000)
+        self.integration_spin.setRange(1, 60_000_000)
 
         self.ordem = QComboBox()
         self.ordem.addItems(["s", "ms", "us"])
@@ -46,10 +46,13 @@ class CCDSettingsWidget(QWidget):
 
         if ordem == "s":
             integration *= 1e6
+            integration = int(integration)
         elif ordem == "ms":
             integration *= 1e3
+            integration = int(integration)
         elif ordem == "us":
             integration *= 1
+            integration = int(integration)
 
         settings = {
             "integration_time": integration,
