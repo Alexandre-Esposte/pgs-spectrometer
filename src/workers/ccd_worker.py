@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-# from ccd.AlphalasCCD import *
+from ccd.AlphalasCCD import *
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QTimer
 
 class CCDWorker(QObject):
@@ -21,7 +21,7 @@ class CCDWorker(QObject):
 
     @pyqtSlot()
     def initialize(self):
-        # self.ccd = AlphalasCCD()
+        self.ccd = AlphalasCCD()
         self.timer = QTimer(self)  # parent = worker
         self.timer.setInterval(self.aquisition_frequency)
         self.timer.timeout.connect(self._acquire)
