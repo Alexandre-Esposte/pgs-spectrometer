@@ -33,7 +33,7 @@ class MotorWorker(QObject):
     def send_command(self, command: dict):
 
         print(command)
-        if self.connector and self.connector.is_open():
+        if self.connector:
             try:    
                 sentido_rotacao = command['direction']
                 status = command['status']
