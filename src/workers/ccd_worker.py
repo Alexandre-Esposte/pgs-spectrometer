@@ -15,7 +15,7 @@ class CCDWorker(QObject):
         self.scans_to_average = 1
         self.dark_correction = False
 
-        self.aquisition_frequency = 10#ms
+        self.aquisition_frequency = 1000#ms
         self.timer = None
 
 
@@ -23,7 +23,7 @@ class CCDWorker(QObject):
     def initialize(self):
         self.ccd = AlphalasCCD()
         self.timer = QTimer(self)  # parent = worker
-        self.timer.setInterval(self.integration_time / 1000 + 500)  # Convertendo microsegundos para milissegundos
+        self.timer.setInterval(self.aquisition_frequency)  # Convertendo microsegundos para milissegundos
         self.timer.timeout.connect(self._acquire)
 
         self.timer.start()
