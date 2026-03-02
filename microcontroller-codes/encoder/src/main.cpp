@@ -3,115 +3,103 @@
 
 #define ENCODER_PIN_A 34
 #define ENCODER_PIN_B 35
+#define ENCODER_PIN_Z 33 
 
-// Variáveis ajustáveis
-double fatorCorrecao = 0.00000760;
-double fatorCalibracao = 0.000208;
+volatile long totalEncoderCount = 0; 
+int16_t lastRawCount = 0;
+float anguloAcumulado = 0;
 
-double CONVERSAO;
+unsigned long lastResetTime = 0; 
+const int DEBOUNCE_Z = 50; // Milissegundos mínimos entre resets do Z (ajuste conforme a velocidade)
 
-volatile long encoderCount = 0;
-volatile int16_t lastRawCount = 0; // Para controlar diferenças
-
-// Configuração de quadratura no PCNT
-void setupPCNT() {
-  // Canal A
-  pcnt_config_t pcntA = {};
-  pcntA.pulse_gpio_num = ENCODER_PIN_A;
-  pcntA.ctrl_gpio_num  = ENCODER_PIN_B;
-  pcntA.unit           = PCNT_UNIT_0;
-  pcntA.channel        = PCNT_CHANNEL_0;
-  pcntA.pos_mode       = PCNT_COUNT_INC;
-  pcntA.neg_mode       = PCNT_COUNT_DEC;
-  pcntA.lctrl_mode     = PCNT_MODE_KEEP;
-  pcntA.hctrl_mode     = PCNT_MODE_REVERSE;
-  pcntA.counter_h_lim  = 32767;
-  pcntA.counter_l_lim  = -32768;
-  pcnt_unit_config(&pcntA);
-
-  // Canal B
-  pcnt_config_t pcntB = {};
-  pcntB.pulse_gpio_num = ENCODER_PIN_B;
-  pcntB.ctrl_gpio_num  = ENCODER_PIN_A;
-  pcntB.unit           = PCNT_UNIT_0;
-  pcntB.channel        = PCNT_CHANNEL_1;
-  pcntB.pos_mode       = PCNT_COUNT_INC;
-  pcntB.neg_mode       = PCNT_COUNT_DEC;
-  pcntB.lctrl_mode     = PCNT_MODE_REVERSE;
-  pcntB.hctrl_mode     = PCNT_MODE_KEEP;
-  pcnt_unit_config(&pcntB);
-
-  // Sem filtro → sem debounce
-  pcnt_filter_disable(PCNT_UNIT_0);
-
-  // Zera e inicia
-  pcnt_counter_clear(PCNT_UNIT_0);
-  pcnt_counter_resume(PCNT_UNIT_0);
-  lastRawCount = 0;
-}
-
-// Task no Core 0 para envio via serial
-void encoderTask(void *pvParameters) {
-  int16_t rawCount = 0;
-
-  while (true) {
-    pcnt_get_counter_value(PCNT_UNIT_0, &rawCount);
-
-    if (rawCount != lastRawCount) {
-      encoderCount += (rawCount - lastRawCount);
-
-      double encoderAngle = encoderCount * 360.0 / 20000.0;
-      double grattingAngle = CONVERSAO * encoderCount;
-
-      uint8_t sync = 0xAA;
-      Serial.write(sync);
-      Serial.write((uint8_t *)&encoderCount, sizeof(encoderCount));
-
-      lastRawCount = rawCount;
-    }
-    vTaskDelay(2 / portTICK_PERIOD_MS);
+void IRAM_ATTR resetIndexISR() {
+  unsigned long currentTime = millis();
+  // Só reseta se o intervalo for maior que 50ms (evita resets por ruído)
+  if (currentTime - lastResetTime > DEBOUNCE_Z) {
+    pcnt_counter_clear(PCNT_UNIT_0);
+    totalEncoderCount = 0;
+    lastRawCount = 0;
+    lastResetTime = currentTime;
   }
 }
+
+void setupPCNT() {
+  pcnt_config_t pcnt_config = {};
+  pcnt_config.pulse_gpio_num = ENCODER_PIN_A;
+  pcnt_config.ctrl_gpio_num = ENCODER_PIN_B;
+  pcnt_config.unit = PCNT_UNIT_0;
+  pcnt_config.channel = PCNT_CHANNEL_0;
+  pcnt_config.pos_mode = PCNT_COUNT_INC;
+  pcnt_config.neg_mode = PCNT_COUNT_DEC;
+  pcnt_config.lctrl_mode = PCNT_MODE_KEEP;
+  pcnt_config.hctrl_mode = PCNT_MODE_REVERSE;
+  pcnt_config.counter_h_lim = 32767;
+  pcnt_config.counter_l_lim = -32768;
+  pcnt_unit_config(&pcnt_config);
+
+  pcnt_config.pulse_gpio_num = ENCODER_PIN_B;
+  pcnt_config.ctrl_gpio_num = ENCODER_PIN_A;
+  pcnt_config.channel = PCNT_CHANNEL_1;
+  pcnt_config.pos_mode = PCNT_COUNT_INC;
+  pcnt_config.neg_mode = PCNT_COUNT_DEC;
+  pcnt_config.lctrl_mode = PCNT_MODE_REVERSE;
+  pcnt_config.hctrl_mode = PCNT_MODE_KEEP;
+  pcnt_unit_config(&pcnt_config);
+
+  pcnt_set_filter_value(PCNT_UNIT_0, 1023); // Filtro máximo no hardware para A e B
+  pcnt_filter_enable(PCNT_UNIT_0);
+  pcnt_counter_clear(PCNT_UNIT_0);
+  pcnt_counter_resume(PCNT_UNIT_0);
+}
+
+// Estrutura de Telemetria (ESP32 -> Python)
+struct __attribute__((packed)) Telemetria {
+  uint8_t sync = 0xAA;    // Byte de sincronismo
+  int32_t pulsos;         // 4 bytes
+  float angulo;           // 4 bytes
+};
+
+Telemetria tele;
+
+
 
 void setup() {
   Serial.begin(921600);
-  delay(500);
+  // Se estiver usando 4.8V direto, o ruído entra fácil aqui. 
+  // O ideal seria um capacitor de 100nF entre o Pino 33 e o GND.
+  pinMode(ENCODER_PIN_Z, INPUT_PULLUP); 
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_Z), resetIndexISR, RISING);
 
-  CONVERSAO = fatorCalibracao - fatorCorrecao;
   setupPCNT();
-
-  xTaskCreatePinnedToCore(
-    encoderTask,
-    "encoderTask",
-    2048,
-    NULL,
-    5,
-    NULL,
-    0 // Core 0
-  );
+  //Serial.println("Filtro Z ativado. Rodando...");
 }
 
 void loop() {
-  if (Serial.available() > 0) {
-    uint8_t sync = Serial.read();
+  int16_t rawCount = 0;
+  pcnt_get_counter_value(PCNT_UNIT_0, &rawCount);
 
-    if (sync == 0xAB && Serial.available() >= 20) {
-      double novoFatorCorrecao;
-      double novoFatorCalibracao;
-      uint32_t dummy;
+  if (rawCount != lastRawCount) {
+    int16_t diff = rawCount - lastRawCount;
+    
+    totalEncoderCount += diff;
+    anguloAcumulado += (diff * (360.0 / 20000.0));
+    
+    lastRawCount = rawCount;
 
-      Serial.readBytes((char *)&novoFatorCorrecao, sizeof(novoFatorCorrecao));
-      Serial.readBytes((char *)&novoFatorCalibracao, sizeof(novoFatorCalibracao));
-      Serial.readBytes((char *)&dummy, sizeof(dummy));
+    // Alimenta a struct
+    tele.pulsos = totalEncoderCount;
+    tele.angulo = anguloAcumulado;
 
-      fatorCorrecao = novoFatorCorrecao;
-      fatorCalibracao = novoFatorCalibracao;
-      CONVERSAO = fatorCalibracao - fatorCorrecao;
-    }
-    else if (sync == 0xAC) {
-      encoderCount = 0;
-      pcnt_counter_clear(PCNT_UNIT_0);
-      lastRawCount = 0; // evita salto no próximo cálculo
-    }
+    // Envia o bloco binário de uma vez (9 bytes no total)
+    Serial.write((uint8_t*)&tele, sizeof(Telemetria));
+
+    //Serial.print("Ang. Var (Z): ");
+    //Serial.print(totalEncoderCount * (360.0 / 20000.0), 2);
+    //Serial.print("Delta theta: ");
+    //Serial.print(anguloAcumulado, 2);
+    //Serial.print(" | Contagens: ");
+    //Serial.println(totalEncoderCount);
   }
+  // Delay de 1ms para não travar a CPU
+  delay(1);
 }
