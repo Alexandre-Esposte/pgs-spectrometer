@@ -3,7 +3,6 @@ import serial
 import struct
 import numpy as np
 
-# from ccd.AlphalasCCD import *
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread, QTimer
 
 

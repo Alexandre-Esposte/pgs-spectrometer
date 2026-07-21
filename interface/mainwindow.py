@@ -15,10 +15,12 @@ from widgets.acquisition_settings import AcquisitionControls
 from widgets.ccd_settings import CCDSettingsWidget
 from widgets.scale_controls import ScaleControlsWidget
 from widgets.motor_controls import MotorControlsWidget
+from widgets.encoder_view import EncoderViewerWidget
 
 # Workers
 from workers.ccd_worker import CCDWorker
 from workers.motor_worker import MotorWorker
+from workers.encoder_worker import EncoderWorker
 
 
 class MainWindow(QMainWindow):
@@ -67,10 +69,8 @@ class MainWindow(QMainWindow):
         # # =========================
         # # Toolbar 2 - Scale
         # # =========================
-
         self.toolbar_graph_settings = QToolBar("Graph Settings")
         self.toolbar_graph_settings.setMovable(False)
-
         self.scale_controls = ScaleControlsWidget()
         self.toolbar_graph_settings.addWidget(self.scale_controls)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar_graph_settings)
@@ -82,7 +82,14 @@ class MainWindow(QMainWindow):
         self.motor_controls = MotorControlsWidget()
         self.toolbar_graph_settings.addWidget(self.motor_controls)
 
-
+        
+        # # =========================
+        # # Toolbar 2 - Encoder (angulo)
+        # # =========================
+        self.toolbar_graph_settings.addSeparator()
+        self.encoder_viewer = EncoderViewerWidget()
+        self.toolbar_graph_settings.addWidget(self.encoder_viewer)
+        
         # =========================
         # Connections
         # =========================
@@ -104,6 +111,10 @@ class MainWindow(QMainWindow):
         # Motor buttons
         self.motor_controls.motor_command.connect(self.motor_worker.send_command)
 
+        # Encoder connections
+        self.encoder_thread.started.connect(self.encoder_worker.receber_angulo)
+        self.encoder_worker.dados_recebidos.connect(self.encoder_viewer.atualizar_dados)
+
     
     
     def auto_scale_function(self):
@@ -121,7 +132,6 @@ class MainWindow(QMainWindow):
         # =========================
         self.ccd_thread = QThread()
         self.ccd_worker = CCDWorker()
-
         self.ccd_worker.moveToThread(self.ccd_thread)
         self.ccd_thread.started.connect(self.ccd_worker.initialize)
         self.ccd_worker.data.connect(self.update_graph)
@@ -132,28 +142,31 @@ class MainWindow(QMainWindow):
         # =========================
         self.motor_thread = QThread()
         self.motor_worker = MotorWorker()
-
         self.motor_worker.moveToThread(self.motor_thread)
         self.motor_thread.started.connect(self.motor_worker.initialize)
-
         self.motor_thread.start()
 
+        # =========================
+        # Encoder Worker
+        # =========================
+        self.encoder_thread = QThread()
+        self.encoder_worker = EncoderWorker()
+        self.encoder_worker.moveToThread(self.encoder_thread)
+        self.encoder_thread.started.connect(self.encoder_worker.receber_angulo)
+        self.encoder_thread.start()
+
     def closeEvent(self, event):
-
         print("Encerrando threads...")
+        
+        # Para o loop interno do encoder antes de matar a thread
+        if hasattr(self, 'encoder_worker'):
+            self.encoder_worker.stop()
 
-        # Finaliza thread do CCD
-        if self.ccd_thread.isRunning():
-            self.ccd_thread.quit()
-            self.ccd_thread.wait()
-
-        # Finaliza thread do Motor
-        if self.motor_thread.isRunning():
-            self.motor_thread.quit()
-            self.motor_thread.wait()
+        for t in [self.ccd_thread, self.motor_thread, self.encoder_thread]:
+            if t.isRunning():
+                t.quit()
+                t.wait()
 
         print("Threads finalizadas com sucesso.")
-
         event.accept()
-
 

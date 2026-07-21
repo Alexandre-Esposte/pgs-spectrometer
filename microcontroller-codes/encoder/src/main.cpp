@@ -5,101 +5,107 @@
 #define ENCODER_PIN_B 35
 #define ENCODER_PIN_Z 33 
 
-volatile long totalEncoderCount = 0; 
+// Ajuste conforme seu encoder: Se ele tem 5000 pulsos por volta
+#define PPR 5000 
+
+volatile int32_t totalHistorico = 0;   
+volatile int32_t acumuladorDelta = 0;
 int16_t lastRawCount = 0;
-float anguloAcumulado = 0;
 
-unsigned long lastResetTime = 0; 
-const int DEBOUNCE_Z = 50; // Milissegundos mínimos entre resets do Z (ajuste conforme a velocidade)
+// Variáveis para filtro do Canal Z
+volatile uint32_t ultimaInterrupcaoZ = 0;
+const uint32_t DEBOUNCE_Z_MS = 50; // Ignora pulsos Z num intervalo menor que 50ms
 
-void IRAM_ATTR resetIndexISR() {
-  unsigned long currentTime = millis();
-  // Só reseta se o intervalo for maior que 50ms (evita resets por ruído)
-  if (currentTime - lastResetTime > DEBOUNCE_Z) {
-    pcnt_counter_clear(PCNT_UNIT_0);
-    totalEncoderCount = 0;
-    lastRawCount = 0;
-    lastResetTime = currentTime;
+struct __attribute__((packed)) Telemetria {
+  uint8_t sync = 0xAA;    
+  int32_t deltaPassos;    
+  int32_t totalAbsoluto;  
+};
+Telemetria tele;
+
+// INTERRUPÇÃO DO CANAL Z COM FILTRO DE TEMPO
+void IRAM_ATTR trataCanalZ() {
+  uint32_t agora = millis();
+  
+  // Só aceita o pulso Z se tiver passado pelo menos 50ms desde o último
+  // Isso mata o ruído de alta frequência do motor
+  if (agora - ultimaInterrupcaoZ > DEBOUNCE_Z_MS) {
+    
+    // CORREÇÃO: Em vez de zerar bruto, alinhamos ao múltiplo de PPR mais próximo
+    // Isso evita "pulos" se o ruído bater fora de hora
+    if (abs(totalHistorico) > (PPR / 2)) {
+        int32_t resto = totalHistorico % PPR;
+        totalHistorico -= resto;
+    } else {
+        totalHistorico = 0;
+    }
+    
+    ultimaInterrupcaoZ = agora;
   }
 }
 
 void setupPCNT() {
   pcnt_config_t pcnt_config = {};
   pcnt_config.pulse_gpio_num = ENCODER_PIN_A;
-  pcnt_config.ctrl_gpio_num = ENCODER_PIN_B;
+  pcnt_config.ctrl_gpio_num = ENCODER_PIN_B; 
   pcnt_config.unit = PCNT_UNIT_0;
   pcnt_config.channel = PCNT_CHANNEL_0;
-  pcnt_config.pos_mode = PCNT_COUNT_INC;
-  pcnt_config.neg_mode = PCNT_COUNT_DEC;
-  pcnt_config.lctrl_mode = PCNT_MODE_KEEP;
-  pcnt_config.hctrl_mode = PCNT_MODE_REVERSE;
-  pcnt_config.counter_h_lim = 32767;
+  
+  pcnt_config.pos_mode = PCNT_COUNT_INC; 
+  pcnt_config.neg_mode = PCNT_COUNT_DIS; // 1x para máxima estabilidade
+  
+  pcnt_config.lctrl_mode = PCNT_MODE_KEEP;    
+  pcnt_config.hctrl_mode = PCNT_MODE_REVERSE; 
+  
+  pcnt_config.counter_h_lim = 32767; 
   pcnt_config.counter_l_lim = -32768;
   pcnt_unit_config(&pcnt_config);
 
-  pcnt_config.pulse_gpio_num = ENCODER_PIN_B;
-  pcnt_config.ctrl_gpio_num = ENCODER_PIN_A;
-  pcnt_config.channel = PCNT_CHANNEL_1;
-  pcnt_config.pos_mode = PCNT_COUNT_INC;
-  pcnt_config.neg_mode = PCNT_COUNT_DEC;
-  pcnt_config.lctrl_mode = PCNT_MODE_REVERSE;
-  pcnt_config.hctrl_mode = PCNT_MODE_KEEP;
-  pcnt_unit_config(&pcnt_config);
-
-  pcnt_set_filter_value(PCNT_UNIT_0, 1023); // Filtro máximo no hardware para A e B
+  // Filtro de Hardware máximo para os canais A e B
+  pcnt_set_filter_value(PCNT_UNIT_0, 1023);
   pcnt_filter_enable(PCNT_UNIT_0);
+
   pcnt_counter_clear(PCNT_UNIT_0);
   pcnt_counter_resume(PCNT_UNIT_0);
 }
 
-// Estrutura de Telemetria (ESP32 -> Python)
-struct __attribute__((packed)) Telemetria {
-  uint8_t sync = 0xAA;    // Byte de sincronismo
-  int32_t pulsos;         // 4 bytes
-  float angulo;           // 4 bytes
-};
-
-Telemetria tele;
-
-
-
 void setup() {
-  Serial.begin(921600);
-  // Se estiver usando 4.8V direto, o ruído entra fácil aqui. 
-  // O ideal seria um capacitor de 100nF entre o Pino 33 e o GND.
-  pinMode(ENCODER_PIN_Z, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_Z), resetIndexISR, RISING);
+  Serial.begin(115200);
+  
+  pinMode(ENCODER_PIN_A, INPUT_PULLUP);
+  pinMode(ENCODER_PIN_B, INPUT_PULLUP);
+  pinMode(ENCODER_PIN_Z, INPUT_PULLUP);
+
+  // Ativa interrupção no Canal Z
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_Z), trataCanalZ, RISING);
 
   setupPCNT();
-  //Serial.println("Filtro Z ativado. Rodando...");
 }
 
 void loop() {
   int16_t rawCount = 0;
   pcnt_get_counter_value(PCNT_UNIT_0, &rawCount);
 
-  if (rawCount != lastRawCount) {
-    int16_t diff = rawCount - lastRawCount;
-    
-    totalEncoderCount += diff;
-    anguloAcumulado += (diff * (360.0 / 20000.0));
-    
+  int16_t diff = rawCount - lastRawCount;
+  
+  // Trava de sanidade contra saltos extraordinários de ruído
+  if (diff != 0 && abs(diff) < 2000) {
+    totalHistorico += diff;
+    acumuladorDelta += diff;
     lastRawCount = rawCount;
-
-    // Alimenta a struct
-    tele.pulsos = totalEncoderCount;
-    tele.angulo = anguloAcumulado;
-
-    // Envia o bloco binário de uma vez (9 bytes no total)
-    Serial.write((uint8_t*)&tele, sizeof(Telemetria));
-
-    //Serial.print("Ang. Var (Z): ");
-    //Serial.print(totalEncoderCount * (360.0 / 20000.0), 2);
-    //Serial.print("Delta theta: ");
-    //Serial.print(anguloAcumulado, 2);
-    //Serial.print(" | Contagens: ");
-    //Serial.println(totalEncoderCount);
+  } else if (abs(diff) >= 2000) {
+    lastRawCount = rawCount; 
   }
-  // Delay de 1ms para não travar a CPU
-  delay(1);
+
+  static uint32_t lastSend = 0;
+  if (millis() - lastSend >= 10) {
+    tele.deltaPassos = acumuladorDelta;
+    tele.totalAbsoluto = totalHistorico;
+    Serial.write((uint8_t*)&tele, sizeof(Telemetria));
+    
+    acumuladorDelta = 0;
+    lastSend = millis();
+  }
+  
+  yield();
 }
