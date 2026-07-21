@@ -23,7 +23,7 @@ class MotorControlsWidget(QWidget):
         self.btn_stop  = QPushButton("Parar motor")
         self.btn_stop.setIcon(QIcon("icons/stop.png"))
 
-        layout.addWidget(QLabel('Tempo de acionamento entre as bobinas:'))
+        layout.addWidget(QLabel('Vel.:'))
         layout.addWidget(self.spin_velocity)
         layout.addWidget(self.combobox_direction)
         layout.addWidget(self.btn_start)

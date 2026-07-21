@@ -4,7 +4,18 @@ import pyqtgraph as pg
 from pathlib import Path
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSignal, QObject, Qt, QThread, QRunnable, QTimer, QCoreApplication
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QToolBar, QAction, QLabel, QSpinBox, QComboBox, QCheckBox
+from PyQt5.QtWidgets import (QApplication, 
+                             QMainWindow,
+                             QWidget, 
+                             QVBoxLayout, 
+                             QToolBar, 
+                             QAction, 
+                             QLabel, 
+                             QSpinBox, 
+                             QComboBox, 
+                             QCheckBox,
+                             QFileDialog,
+                             QMessageBox)
 
 
 # Configurações do grafico do pyqtraph
@@ -16,6 +27,7 @@ from widgets.ccd_settings import CCDSettingsWidget
 from widgets.scale_controls import ScaleControlsWidget
 from widgets.motor_controls import MotorControlsWidget
 from widgets.encoder_view import EncoderViewerWidget
+from widgets.save_controls import SaveControlsWidget
 
 # Workers
 from workers.ccd_worker import CCDWorker
@@ -28,6 +40,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+
+        self.data = None
 
         self.setWindowTitle("PGS - Espectrometro CCD")
         self.resize(900, 500)
@@ -66,6 +80,7 @@ class MainWindow(QMainWindow):
         # =========================
         self.addToolBarBreak(Qt.TopToolBarArea)
 
+
         # # =========================
         # # Toolbar 2 - Scale
         # # =========================
@@ -74,6 +89,15 @@ class MainWindow(QMainWindow):
         self.scale_controls = ScaleControlsWidget()
         self.toolbar_graph_settings.addWidget(self.scale_controls)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar_graph_settings)
+
+         # =========================
+        # # Toolbar 2 - Save
+        # # =========================
+        self.toolbar_graph_settings.addSeparator()
+        self.save_controls = SaveControlsWidget()
+        self.toolbar_graph_settings.addWidget(self.save_controls)
+
+
 
         # # =========================
         # # Toolbar 2 - Motor
@@ -107,6 +131,10 @@ class MainWindow(QMainWindow):
 
         # Scale
         self.scale_controls.autoscale_clicked.connect(self.auto_scale_function)
+        self.scale_controls.scale_clicked.connect(self.scale_function)
+
+        # Save
+        self.save_controls.save_clicked.connect(self.save_spectrum)
 
         # Motor buttons
         self.motor_controls.motor_command.connect(self.motor_worker.send_command)
@@ -116,13 +144,31 @@ class MainWindow(QMainWindow):
         self.encoder_worker.dados_recebidos.connect(self.encoder_viewer.atualizar_dados)
 
     
+    def save_spectrum(self):
+        print('Salvando')
+
+        caminho_arquivo, _ = QFileDialog.getSaveFileName(
+        self,
+        "Salvar Arquivo",
+        "meu_arquivo.txt",  # Nome padrão que já vem pré-preenchido
+        "Arquivos de Texto (*.txt);;Arquivos CSV (*.csv);;Todos os Arquivos (*)",
+    )
+
+        print(caminho_arquivo)
     
     def auto_scale_function(self):
         print("Auto scale acionado.")
         self.ccd_graph.enableAutoRange()
 
+    def scale_function(self):
+        print("Scale Acionado")
+        if len(self.data > 0 ):
+            max_value = np.max(self.data)
+            self.ccd_graph.setYRange(0, max_value + 100)
+
 
     def update_graph(self, data: np.ndarray):
+        self.data = data.copy()
         self.curve.setData(data)
 
     def _setup_worker(self):
