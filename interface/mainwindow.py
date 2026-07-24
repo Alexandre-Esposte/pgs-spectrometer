@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pyqtgraph as pg
 
 from pathlib import Path
@@ -28,6 +29,8 @@ from widgets.scale_controls import ScaleControlsWidget
 from widgets.motor_controls import MotorControlsWidget
 from widgets.encoder_view import EncoderViewerWidget
 from widgets.save_controls import SaveControlsWidget
+from widgets.baseline_controls import BaselineControlsWidget
+from widgets.dark_controls import DarkControlsWidget
 
 # Workers
 from workers.ccd_worker import CCDWorker
@@ -41,7 +44,11 @@ class MainWindow(QMainWindow):
         super().__init__()
 
 
+        self.data_original = None
         self.data = None
+
+        self.baseline = np.zeros(3648)
+        self.dark = np.zeros(3648)
 
         self.setWindowTitle("PGS - Espectrometro CCD")
         self.resize(900, 500)
@@ -90,13 +97,26 @@ class MainWindow(QMainWindow):
         self.toolbar_graph_settings.addWidget(self.scale_controls)
         self.addToolBar(Qt.TopToolBarArea, self.toolbar_graph_settings)
 
-         # =========================
+        # # =========================
         # # Toolbar 2 - Save
         # # =========================
         self.toolbar_graph_settings.addSeparator()
         self.save_controls = SaveControlsWidget()
         self.toolbar_graph_settings.addWidget(self.save_controls)
 
+        # # =========================
+        # # Toolbar 2 - Baseline
+        # # =========================
+        self.toolbar_graph_settings.addSeparator()
+        self.baseline_controls = BaselineControlsWidget()
+        self.toolbar_graph_settings.addWidget(self.baseline_controls)
+
+        # # =========================
+        # # Toolbar 2 - DARK
+        # # =========================
+        self.toolbar_graph_settings.addSeparator()
+        self.dark_controls = DarkControlsWidget()
+        self.toolbar_graph_settings.addWidget(self.dark_controls)
 
 
         # # =========================
@@ -136,6 +156,12 @@ class MainWindow(QMainWindow):
         # Save
         self.save_controls.save_clicked.connect(self.save_spectrum)
 
+        #Baseline
+        self.baseline_controls.baseline_clicked.connect(self.baseline_offset)
+
+        #Dark
+        self.dark_controls.dark_clicked.connect(self.dark_offset)
+
         # Motor buttons
         self.motor_controls.motor_command.connect(self.motor_worker.send_command)
 
@@ -143,19 +169,30 @@ class MainWindow(QMainWindow):
         self.encoder_thread.started.connect(self.encoder_worker.receber_angulo)
         self.encoder_worker.dados_recebidos.connect(self.encoder_viewer.atualizar_dados)
 
-    
+    def dark_offset(self):
+        if len(self.data)>0:
+            self.dark = self.data_original.copy()
+
+    def baseline_offset(self):
+        print('baseline')
+        if len(self.data > 0):
+            self.baseline = np.median(self.data_original[0:100])
+
     def save_spectrum(self):
         print('Salvando')
 
         caminho_arquivo, _ = QFileDialog.getSaveFileName(
         self,
         "Salvar Arquivo",
-        "meu_arquivo.txt",  # Nome padrão que já vem pré-preenchido
+        "meu_arquivo.csv",  # Nome padrão que já vem pré-preenchido
         "Arquivos de Texto (*.txt);;Arquivos CSV (*.csv);;Todos os Arquivos (*)",
     )
+        if len(self.data)!= 0:
+            x = [i for i in range(len(self.data))]
+            spectrum = pd.DataFrame({"pixel": x, "intensidade": self.data})
+            spectrum.to_csv(caminho_arquivo, index=None)
 
-        print(caminho_arquivo)
-    
+
     def auto_scale_function(self):
         print("Auto scale acionado.")
         self.ccd_graph.enableAutoRange()
@@ -168,8 +205,9 @@ class MainWindow(QMainWindow):
 
 
     def update_graph(self, data: np.ndarray):
-        self.data = data.copy()
-        self.curve.setData(data)
+        self.data_original = data.copy()
+        self.data = self.data_original - self.baseline - self.dark
+        self.curve.setData(self.data)
 
     def _setup_worker(self):
 

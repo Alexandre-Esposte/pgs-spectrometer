@@ -13,6 +13,7 @@ dependencies = [
     "pyqt5>=5.15.11",
     "pyqtgraph>=0.13.7",
     "streamlit>=1.50.0",
+    "pandas>=2.3.3",
 ]
 
 [build-system]

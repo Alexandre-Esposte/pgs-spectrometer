@@ -19,9 +19,11 @@ class CCDSettingsWidget(QWidget):
 
         self.integration_spin = QSpinBox()
         self.integration_spin.setRange(1, 60_000_000)
+        self.integration_spin.setValue(100)
 
         self.ordem = QComboBox()
         self.ordem.addItems(["s", "ms", "us"])
+        self.ordem.setCurrentText('ms')
 
         self.average_spin = QSpinBox()
         self.average_spin.setRange(1, 100)
